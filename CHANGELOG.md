@@ -21,6 +21,9 @@ Based on upstream `atameric/ps5-portal-high-bitrate` (main, October 2026) and
 - `--seconds` support for `baseline`; guardian `GUARD_READY` timeout raised from
   10 s to 90 s (cold Python+scapy start on small routers).
 - `install.sh` / `uninstall.sh`, bytecode precompilation, docs.
+- Agent-friendly operating layer: `AGENTS.md`, `skill/SKILL.md`,
+  `skill/manifest.json` and `skill/scripts/{detect,install,configure,verify,rollback}.sh`
+  (`detect` and `verify` are read-only and emit JSON).
 
 ### Known limitations
 

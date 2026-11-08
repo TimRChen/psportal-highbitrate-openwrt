@@ -1,0 +1,90 @@
+{
+  "name": "psportal-highbitrate-openwrt",
+  "version": "0.1.0",
+  "kind": "agent-skill",
+  "upstream": "https://github.com/atameric/ps5-portal-high-bitrate",
+  "license": "MIT",
+  "summary": "Install/configure/verify/rollback the PS Portal high-bitrate relay on an OpenWrt router.",
+  "requirements": {
+    "os": "OpenWrt or ImmortalWrt (fw4 / nftables)",
+    "root": true,
+    "binaries": ["nft", "ip", "python3", "sh"],
+    "python": ["scapy>=2.6,<2.7"],
+    "overlay_free_mb": 35,
+    "network": "PS5 and Portal on the same L2 segment as the router LAN bridge, no client isolation"
+  },
+  "entrypoints": {
+    "detect": "scripts/detect.sh",
+    "install": "scripts/install.sh",
+    "configure": "scripts/configure.sh",
+    "verify": "scripts/verify.sh",
+    "rollback": "scripts/rollback.sh"
+  },
+  "config": {
+    "path": "/etc/portal-bitrate/auto-config.json",
+    "runtime": "/var/lib/portal-bitrate",
+    "cli": "/usr/bin/portal-bitrate",
+    "service": "/etc/init.d/portal-bitrate"
+  },
+  "steps": [
+    {
+      "id": "detect",
+      "command": "sh skill/scripts/detect.sh",
+      "pass": "stdout JSON has ok=true"
+    },
+    {
+      "id": "install",
+      "command": "sh skill/scripts/install.sh",
+      "pass": "exit code 0 and /usr/bin/portal-bitrate exists"
+    },
+    {
+      "id": "configure",
+      "command": "sh skill/scripts/configure.sh --ps5-ip <IP> --portal-ip <IP> --profile 65",
+      "pass": "/etc/portal-bitrate/auto-config.json contains ps5_mac and portal_mac"
+    },
+    {
+      "id": "baseline",
+      "command": "portal-bitrate baseline --seconds 240",
+      "human_step": "disconnect Portal, reconnect inside the window after 'BASELINE READY'",
+      "pass": "auto-baseline.json exists with restored=true and forwarded_out>0"
+    },
+    {
+      "id": "verify-mutation",
+      "command": "portal-bitrate session 300",
+      "human_step": "disconnect + reconnect Portal inside the window after 'AUTO READY'",
+      "pass": "status.json counts.modified_packets_including_retransmits>=1 and unique_modified_startups>=1"
+    },
+    {
+      "id": "persist",
+      "command": "/etc/init.d/portal-bitrate enable && /etc/init.d/portal-bitrate start",
+      "pass": "verify.sh reports exactly one relay instance and service_running=true"
+    }
+  ],
+  "verification": {
+    "read_only": true,
+    "script": "scripts/verify.sh",
+    "checks": {
+      "relay_instances": "0 or 2 (main + guardian); 4+ means duplicate relays",
+      "guard_table_present": "true only while a relay is running",
+      "arp_restored": "true when no relay is running",
+      "baseline_receipt": "true before any active run",
+      "config_enrolled": "true"
+    }
+  },
+  "safety": {
+    "nftables": "only table inet portal_bitrate_guard; never flush or edit inet fw4",
+    "forbidden": ["nft flush", "trust global forwarding changes", "reboot", "publish MAC/IP/Wi-Fi keys/subscription URLs"],
+    "single_instance": true,
+    "recovery_required_after_stop": ["arp entries restored", "guard table removed", "no portal_auto.py process"]
+  },
+  "human_in_the_loop": [
+    "reconnect the Portal inside the baseline window",
+    "reconnect the Portal inside the active window",
+    "confirm picture and controls after mutation"
+  ],
+  "limits": [
+    "One upstream-validated Portal firmware layout (7.1.7)",
+    "No 4K, no guaranteed latency improvement",
+    "Target bitrate != measured video throughput"
+  ]
+}

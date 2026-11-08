@@ -18,6 +18,32 @@ gateway itself: no extra PC, no Raspberry Pi, no always-on second box.
 
 中文快速开始：[跳到中文](#中文快速开始)
 
+## For AI agents
+
+This repo ships an **agent skill** so an assistant can install, configure, verify
+and roll back the relay without improvising commands:
+
+- [`AGENTS.md`](AGENTS.md) — ground rules, gates, success criteria, reporting format
+- [`skill/SKILL.md`](skill/SKILL.md) — step-by-step playbook with a diagnostics table
+- [`skill/manifest.json`](skill/manifest.json) — machine-readable requirements, steps and checks
+- [`skill/scripts/`](skill/scripts/) — `detect.sh` (read-only probe, JSON),
+  `install.sh`, `configure.sh`, `verify.sh` (read-only, JSON), `rollback.sh`
+
+Typical agent loop:
+
+```sh
+sh skill/scripts/detect.sh                       # JSON; stop if ok=false
+sh skill/scripts/install.sh
+sh skill/scripts/configure.sh --ps5-ip <IP> --portal-ip <IP> --profile 65
+portal-bitrate baseline --seconds 240            # human reconnects Portal in window
+portal-bitrate session 300                       # human reconnects again; verify counters
+sh skill/scripts/verify.sh                       # JSON; ok must be true
+```
+
+Safety contract enforced by the skill: only the scoped `inet portal_bitrate_guard`
+table is touched, `ip_forward` is never changed, one relay instance only, and
+recovery must be verified after every stop.
+
 ---
 
 ## What it actually does
