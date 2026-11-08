@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Python syntax (upstream modules + port patches)
+        run: |
+          python -m pip install -q scapy==2.6.1
+          fail=0
+          for f in module/*.py; do
+            python -m py_compile "$f" || fail=1
+          done
+          exit $fail
+      - name: Shell syntax + shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+          for f in install.sh uninstall.sh openwrt/portal-bitrate; do
+            sh -n "$f"
+            shellcheck "$f" || true
+          done
+          # OpenWrt procd init scripts source /etc/rc.common; lint leniently
+          sh -n openwrt/portal-bitrate.init
+          shellcheck -s sh openwrt/portal-bitrate.init || true
