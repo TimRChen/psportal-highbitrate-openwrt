@@ -268,10 +268,11 @@ namespace, with the kernel's duplicate drop handled by the scoped table.
 <details>
 <summary><b>Will it survive a reboot?</b></summary>
 
-Yes when the service is enabled (`/etc/init.d/portal-bitrate enable`). The relay
-re-enrolls nothing; it reads `/etc/portal-bitrate/auto-config.json` and requires a
-valid baseline receipt, so keep both files across reboots (they are on the normal
-overlay).
+Yes when the service is enabled (`/etc/init.d/portal-bitrate enable`). `/var` is
+tmpfs on OpenWrt, so the baseline receipt is also mirrored to
+`/etc/portal-bitrate/auto-baseline.json` and read back from there after a reboot.
+If both copies are missing (firmware upgrade, code change), re-run the baseline;
+the init script refuses to start instead of crash-looping.
 
 </details>
 

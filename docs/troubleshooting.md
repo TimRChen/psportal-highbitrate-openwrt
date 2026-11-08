@@ -51,6 +51,20 @@ portal-bitrate repair      # corrective ARP + guard table removal
 ARP entries also expire by themselves (tens of seconds). A leftover guard table
 only blocks the `Portal → PS5` direction and never affects `PS5 → Portal` video.
 
+## Service fails after a reboot: "Run a successful baseline with this config/version first"
+
+`/var` is tmpfs on OpenWrt, so the runtime copy of the baseline receipt is lost on
+every reboot. This port keeps a second copy in
+`/etc/portal-bitrate/auto-baseline.json`, and the init script refuses to start
+(returns non-zero instead of crash-looping) when neither copy exists.
+
+If both copies are gone — after a firmware upgrade, a `--purge`, or after editing
+`module/*.py` (the fingerprint changes) — simply re-run the baseline:
+
+```sh
+portal-bitrate baseline --seconds 240
+```
+
 ## `modified_packets_including_retransmits` stays 0
 
 The captured startup packet does not match the recorded layout. Upstream

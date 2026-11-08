@@ -20,6 +20,8 @@ import portal_active_probe as probe
 import portal_auto_platform as net
 
 ROOT = Path(__file__).resolve().parent
+# /var is tmpfs on OpenWrt: keep the baseline receipt next to the enrollment.
+PERSIST_DIR = Path('/etc/portal-bitrate')
 PROFILES = {'65': bytes.fromhex('04'), '100': bytes.fromhex('03501b0005'), '200': bytes.fromhex('00501b0005')}
 LOG = logging.getLogger('portal-auto')
 HEARTBEAT_TIMEOUT = 30  # Allows a bounded Windows forwarding-state query.
@@ -55,11 +57,15 @@ def fingerprint(c):
 
 
 def baseline_valid(c, runtime):
-    try:
-        receipt = json.loads((runtime / 'auto-baseline.json').read_text())
-        return receipt['fingerprint'] == fingerprint(c) and receipt['forwarded_out'] > 0 and receipt['restored'] is True
-    except (OSError, ValueError, KeyError, TypeError):
-        return False
+    """The receipt must survive a reboot: /var is tmpfs on OpenWrt, so the
+    runtime copy disappears. A persistent copy lives next to the enrollment."""
+    for path in (runtime / 'auto-baseline.json', PERSIST_DIR / 'auto-baseline.json'):
+        try:
+            receipt = json.loads(path.read_text())
+            return receipt['fingerprint'] == fingerprint(c) and receipt['forwarded_out'] > 0 and receipt['restored'] is True
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return False
 
 
 def portal_arp(state, repair=False):
@@ -266,9 +272,15 @@ def run(c, runtime, active=True, seconds=None):
         if errors:
             raise RuntimeError('; '.join(errors))
     if not active and counts['forwarded_out']:
-        atomic_json(runtime / 'auto-baseline.json', {'time': utc(), 'fingerprint': fingerprint(c),
-                    'forwarded_out': counts['forwarded_out'], 'restored': True,
-                    'limit': 'Transport observed, not proof of picture quality or input responsiveness.'})
+        receipt = {'time': utc(), 'fingerprint': fingerprint(c),
+                   'forwarded_out': counts['forwarded_out'], 'restored': True,
+                   'limit': 'Transport observed, not proof of picture quality or input responsiveness.'}
+        atomic_json(runtime / 'auto-baseline.json', receipt)
+        try:
+            PERSIST_DIR.mkdir(parents=True, exist_ok=True)
+            atomic_json(PERSIST_DIR / 'auto-baseline.json', receipt)
+        except OSError:
+            pass
     return dict(counts)
 
 
