@@ -106,9 +106,15 @@ During steps 3 and 4 the Portal must be **disconnected and reconnected inside th
 window**. The relay prints `BASELINE READY` / `AUTO READY` first; the counters
 then confirm the patch. Use `portal-bitrate status` to watch them.
 
-**Daily use (recommended):** on weak CPUs, skip the permanent service and arm a
-window before playing instead — `portal-bitrate arm 180`, reconnect the Portal
-when it says `ready`, and the relay restores the direct path by itself.
+**Daily use — pick one:**
+
+- **Fully automatic (recommended for most routers):** enable the service once
+  (`/etc/init.d/portal-bitrate enable && /etc/init.d/portal-bitrate start`).
+  Every new Portal session is patched with no manual step. The receipt is
+  persisted, so this survives reboots.
+- **Zero relay overhead while playing:** leave the service stopped and run
+  `portal-bitrate arm 180` before a session. It waits for `ready`, you reconnect
+  the Portal, the patch applies once, and the direct path is restored by itself.
 
 ---
 
