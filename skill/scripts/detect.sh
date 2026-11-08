@@ -43,6 +43,20 @@ iface="br-lan"
 bridge=$(ip -o link show type bridge 2>/dev/null | awk -F': ' 'NR==1{print $2}' | cut -d@ -f1)
 [ -n "$bridge" ] && iface="$bridge"
 
+# Half-open IPv6: the LAN advertises IPv6 (ULA/global) but there is no IPv6
+# default route. Clients try IPv6 first, fail, fall back to IPv4, and some
+# devices (PlayStation Portal included) keep a false "network warning".
+ipv6_half_open=false
+if [ -n "$bridge" ]; then
+	lan_v6=$(ip -6 addr show dev "$bridge" 2>/dev/null | awk '/inet6/{print $2}' | grep -E '^(2|3|f[cd])' | head -1)
+	v6_default=$(ip -6 route show default 2>/dev/null | head -1)
+	if [ -n "$lan_v6" ] && [ -z "$v6_default" ]; then ipv6_half_open=true; fi
+fi
+
+warnings=""
+add_warning() { warnings="${warnings:+$warnings,}$(json_str "$1")"; }
+[ "$ipv6_half_open" = true ] && add_warning "half-open IPv6 on the LAN: addresses are advertised but there is no IPv6 default route; clients may show a false network warning"
+
 installed=0; [ -x /usr/bin/portal-bitrate ] && installed=1
 service_enabled=0; [ -e /etc/rc.d/S99portal-bitrate ] && service_enabled=1
 config_enrolled=0
@@ -57,8 +71,8 @@ ok=1
 [ "$root" = "1" ] && [ "$nft_ok" = "1" ] && [ "$ip_ok" = "1" ] && [ "$py_ok" = "1" ] && [ "$scapy_ok" = "1" ] || ok=0
 [ "${free_mb:-0}" -ge 35 ] 2>/dev/null || ok=0
 
-printf '{"ok":%s,"reasons":[%s],"os":%s,"kernel":%s,"arch":%s,"root":%s,' \
-	"$([ "$ok" = 1 ] && echo true || echo false)" "$reasons" "$(json_str "$os_release")" "$(json_str "$kernel")" "$(json_str "$arch")" "$([ "$root" = 1 ] && echo true || echo false)"
+printf '{"ok":%s,"reasons":[%s],"warnings":[%s],"ipv6_half_open":%s,"os":%s,"kernel":%s,"arch":%s,"root":%s,' \
+	"$([ "$ok" = 1 ] && echo true || echo false)" "$reasons" "$warnings" "$ipv6_half_open" "$(json_str "$os_release")" "$(json_str "$kernel")" "$(json_str "$arch")" "$([ "$root" = 1 ] && echo true || echo false)"
 printf '"nft":%s,"iproute2":%s,"python3":%s,"python_version":%s,"scapy":%s,"scapy_version":%s,' \
 	"$([ "$nft_ok" = 1 ] && echo true || echo false)" "$([ "$ip_ok" = 1 ] && echo true || echo false)" "$([ "$py_ok" = 1 ] && echo true || echo false)" "$(json_str "$py_ver")" "$([ "$scapy_ok" = 1 ] && echo true || echo false)" "$(json_str "$scapy_ver")"
 printf '"overlay_free_mb":%s,"lan_bridge":%s,"installed":%s,"service_enabled":%s,"config_enrolled":%s,"relay_instances":%s,"guard_table_present":%s}\n' \

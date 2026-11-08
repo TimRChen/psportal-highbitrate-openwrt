@@ -51,6 +51,48 @@ portal-bitrate repair      # corrective ARP + guard table removal
 ARP entries also expire by themselves (tens of seconds). A leftover guard table
 only blocks the `Portal → PS5` direction and never affects `PS5 → Portal` video.
 
+## Portal shows a "network warning" icon although streaming works
+
+A small warning icon in the Portal's top-right corner can appear while the stream
+itself is fine. Check the relay first (`portal-bitrate status`): if the relay is
+not running, it cannot be the cause.
+
+The most common non-relay cause is **half-open IPv6 on the LAN**: the router
+advertises IPv6 addresses to clients (ULA prefix / router advertisements) but has
+no IPv6 uplink or default route. Clients prefer IPv6, their reachability checks
+fail, they fall back to IPv4 — and the device may keep a warning indicator even
+though IPv4 works.
+
+Check on the router:
+
+```sh
+ip -6 addr show dev br-lan | grep 'inet6'      # a 2xxx/3xxx or fd.. address?
+ip -6 route show default                        # empty = no IPv6 uplink
+uci show network | grep -E 'ula_prefix|ip6assign'
+uci show dhcp.lan | grep -E "\.ra=|\.dhcpv6="
+```
+
+If an address is advertised but there is no IPv6 default route, disable IPv6 on
+the LAN (it only adds fallback noise when the WAN is IPv4-only):
+
+```sh
+uci -q delete network.globals.ula_prefix
+uci -q delete network.lan.ip6assign
+uci set dhcp.lan.ra='disabled'
+uci set dhcp.lan.dhcpv6='disabled'
+uci set dhcp.lan.ndp='disabled'
+uci commit network; uci commit dhcp
+ip -6 addr del <advertised-prefix>::1/60 dev br-lan 2>/dev/null
+/etc/init.d/dnsmasq restart; /etc/init.d/odhcpd restart
+```
+
+Then toggle Wi-Fi on the Portal so it drops the stale IPv6 address. `detect.sh`
+reports this as a warning (`ipv6_half_open: true`).
+
+Other causes worth checking, in order: CPU saturation on the router (see the
+stutter section above), a 20 MHz Wi-Fi fallback on the Portal, and a weak PS5
+RSSI.
+
 ## Service fails after a reboot: "Run a successful baseline with this config/version first"
 
 `/var` is tmpfs on OpenWrt, so the runtime copy of the baseline receipt is lost on

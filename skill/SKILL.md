@@ -126,6 +126,7 @@ human to run `portal-bitrate session <secs>` before each play session instead.
 | `ERROR: IPv4 forwarding is enabled. No changes made.` | router-mode env missing (the procd `env` list was overwritten) | use the CLI, or one list: `procd_set_param env PORTAL_BITRATE_ROUTER_MODE=1 PYTHONUNBUFFERED=1` |
 | `ERROR: ` + `_queue.Empty` | guardian didn't report in time (cold start) | verify timeout is 90 s, run `python3 -m compileall -q /usr/lib/portal-bitrate/`, check RAM |
 | `modified_packets_including_retransmits` stays 0 | no fresh session captured / layout mismatch | ensure the relay was armed before the reconnect; report firmware |
+| Portal shows a network-warning icon but streaming works | half-open IPv6 on the LAN (addresses advertised, no IPv6 uplink) — `detect.sh` reports `ipv6_half_open: true` | disable LAN IPv6 (see `docs/troubleshooting.md`), then toggle Wi-Fi on the Portal |
 | Portal stutters, drops to 720p/360p | CPU saturation on the router (OpenClash streaming auto-select, LuCI OpenClash page polling), Wi-Fi 20 MHz fallback, weak PS5 RSSI | `uci set openclash.config.stream_auto_select=0 && uci commit openclash && /etc/init.d/openclash restart`; close LuCI OpenClash tabs; check `iwinfo rax0 assoclist`; wire the PS5 |
 | Portal cannot reach the PS5 at all | stale spoofed ARP after an unclean kill | `portal-bitrate repair` |
 | Two relays / port 7681 UI says one instance but two run | manual run + service | stop service, kill leftover `portal_auto.py`, remove lock, start service |

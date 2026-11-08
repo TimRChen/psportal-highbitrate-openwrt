@@ -271,6 +271,20 @@ namespace, with the kernel's duplicate drop handled by the scoped table.
 </details>
 
 <details>
+<summary><b>The Portal shows a network-warning icon but streaming works — is it the relay?</b></summary>
+
+Usually not. If `portal-bitrate status` says the relay is stopped, it cannot be
+involved. The most common LAN-side cause is **half-open IPv6**: the router
+advertises IPv6 addresses (ULA prefix / RA) without an IPv6 uplink, so clients
+try IPv6 first, fail, fall back to IPv4, and may keep a warning indicator. Check
+with `ip -6 route show default` (empty = no uplink) and `uci show network |
+grep ula_prefix`; if an address is advertised with no default route, disable
+LAN IPv6. `skill/scripts/detect.sh` flags this as `ipv6_half_open`. Full steps:
+[docs/troubleshooting.md](docs/troubleshooting.md).
+
+</details>
+
+<details>
 <summary><b>Will it survive a reboot?</b></summary>
 
 Yes when the service is enabled (`/etc/init.d/portal-bitrate enable`). `/var` is
