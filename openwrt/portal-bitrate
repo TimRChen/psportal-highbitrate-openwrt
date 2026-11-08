@@ -1,0 +1,52 @@
+#!/bin/sh
+# PS Portal high-bitrate relay — OpenWrt router-mode port
+# Upstream: https://github.com/atameric/ps5-portal-high-bitrate (MIT)
+set -u
+export PORTAL_BITRATE_ROUTER_MODE=1
+DIR=/usr/lib/portal-bitrate
+CFG=/etc/portal-bitrate/auto-config.json
+RT=/var/lib/portal-bitrate
+PY=/usr/bin/python3
+
+mkdir -p /etc/portal-bitrate "$RT"
+
+_r() {
+	exec "$PY" -u "$DIR/portal_auto.py" "$@" --config "$CFG" --runtime "$RT"
+}
+
+cmd="${1:-help}"
+[ $# -gt 0 ] && shift
+case "$cmd" in
+	configure) _r configure "$@" ;;
+	baseline)  _r baseline ;;
+	run)       _r run "$@" ;;
+	status)    _r status ;;
+	stop)      _r stop ;;
+	repair)    _r repair ;;
+	verify)    _r verify-baseline ;;
+	service)   /etc/init.d/portal-bitrate "$@" ;;
+	guard)
+		# Emergency: remove the scoped nftables table (does not touch ARP).
+		/usr/sbin/nft delete table inet portal_bitrate_guard 2>/dev/null && echo "guard table removed" || echo "no guard table"
+		;;
+	*)
+		cat <<'EOF'
+portal-bitrate — PS Portal high-bitrate relay (OpenWrt router-mode port)
+Upstream: https://github.com/atameric/ps5-portal-high-bitrate (MIT)
+
+Usage: portal-bitrate <command> [options]
+
+  configure --interface br-lan --ps5-ip 192.168.1.100 --portal-ip 192.168.1.101 [--profile 65]
+  baseline     Disconnect Portal first; connect it again within 60 s and check
+               picture + controls. Creates the baseline receipt.
+  run          Foreground active trial (profile from config). Ctrl+C restores.
+  status       Show relay state / last report.
+  stop         Write the persistent stop marker (service keeps running until it exits).
+  repair       After a crash: send corrective ARP + remove the guard table.
+  verify       Verify the baseline receipt matches this config and code.
+  service start|stop|enable|disable   Control the procd service.
+  guard        Emergency: delete only the scoped nftables table.
+  help         This text.
+EOF
+		;;
+esac

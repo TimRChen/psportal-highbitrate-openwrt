@@ -1,0 +1,6 @@
+# Router-side scripts and Python modules must keep LF line endings.
+* text=auto eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+openwrt/* text eol=lf
+*.md text eol=lf

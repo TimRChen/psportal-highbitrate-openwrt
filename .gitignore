@@ -1,0 +1,16 @@
+# Ignore local enrollments, runtime state and captures
+auto-config.json
+config.json
+auto-runtime/
+auto-baseline.json
+*.runtime
+*.log
+*.pcap
+*.pcapng
+captures/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.tmp
+.DS_Store
