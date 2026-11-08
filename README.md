@@ -106,6 +106,10 @@ During steps 3 and 4 the Portal must be **disconnected and reconnected inside th
 window**. The relay prints `BASELINE READY` / `AUTO READY` first; the counters
 then confirm the patch. Use `portal-bitrate status` to watch them.
 
+**Daily use (recommended):** on weak CPUs, skip the permanent service and arm a
+window before playing instead — `portal-bitrate arm 180`, reconnect the Portal
+when it says `ready`, and the relay restores the direct path by itself.
+
 ---
 
 ## Verified result
@@ -160,7 +164,8 @@ match the packet heuristic; nothing breaks, the counters simply stay at zero.
 |---|---|
 | `portal-bitrate configure ...` | Enroll PS5 + Portal (ARP-verified), write `/etc/portal-bitrate/auto-config.json`. |
 | `portal-bitrate baseline [--seconds N]` | No-mutation run; writes the baseline receipt required before active mode. |
-| `portal-bitrate session [secs]` | Bounded on-demand window (default 120 s): patch the next fresh session, then restore the direct path. |
+| `portal-bitrate arm [secs]` | **Recommended for playing.** Background window (default 180 s): waits for `AUTO READY`, then you reconnect the Portal; the patch applies once and the direct path is restored. |
+| `portal-bitrate session [secs]` | Foreground version of `arm` (Ctrl+C restores). |
 | `portal-bitrate run [--seconds N]` | Foreground relay, active mode (continuous while running). |
 | `portal-bitrate status` | State + counters from `/var/lib/portal-bitrate/status.json`. |
 | `portal-bitrate stop` | Write the persistent stop marker. |

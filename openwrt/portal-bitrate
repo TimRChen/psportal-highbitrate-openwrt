@@ -18,8 +18,28 @@ cmd="${1:-help}"
 [ $# -gt 0 ] && shift
 case "$cmd" in
 	configure) _r configure "$@" ;;
-	baseline)  _r baseline ;;
+	baseline)  _r baseline "$@" ;;
 	run)       _r run "$@" ;;
+	arm)
+		# Background on-demand window: patch the next fresh session, then restore.
+		secs="${1:-180}"
+		rm -f /var/run/portal-lab-capture.lock
+		/usr/sbin/nft delete table inet portal_bitrate_guard 2>/dev/null
+		nohup env PORTAL_BITRATE_ROUTER_MODE=1 "$PY" -u "$DIR/portal_auto.py" run \
+			--config "$CFG" --runtime "$RT" --seconds "$secs" \
+			> /tmp/psportal-session.log 2>&1 &
+		echo "armed: ${secs}s window (log: /tmp/psportal-session.log)"
+		echo "hook:  waiting for the relay to be ready..."
+		i=0
+		while [ $i -lt ${secs} ]; do
+			grep -q "AUTO READY" /tmp/psportal-session.log 2>/dev/null && break
+			sleep 2
+			i=$((i + 2))
+		done
+		grep -q "AUTO READY" /tmp/psportal-session.log 2>/dev/null \
+			&& echo "ready: disconnect the Portal from the PS5, then reconnect it now." \
+			|| echo "warn:  no AUTO READY yet; check /tmp/psportal-session.log"
+		;;
 	status)    _r status ;;
 	stop)      _r stop ;;
 	repair)    _r repair ;;
@@ -36,15 +56,20 @@ Upstream: https://github.com/atameric/ps5-portal-high-bitrate (MIT)
 
 Usage: portal-bitrate <command> [options]
 
-  configure --interface br-lan --ps5-ip 192.168.1.100 --portal-ip 192.168.1.101 [--profile 65]
-  baseline     Disconnect Portal first; connect it again within 60 s and check
-               picture + controls. Creates the baseline receipt.
-  run          Foreground active trial (profile from config). Ctrl+C restores.
+  arm [secs]   Recommended for playing: open a background window (default 180 s),
+               wait for "ready", then disconnect + reconnect the Portal inside the
+               window. The patch applies once, then the direct path is restored.
+  session [secs]
+               Foreground version of arm (Ctrl+C restores).
+  configure --interface br-lan --ps5-ip <PS5_IP> --portal-ip <PORTAL_IP> [--profile 65]
+  baseline [--seconds N]   No-mutation run; writes the baseline receipt (needed once,
+               and again after a code/config change or a firmware upgrade).
+  run [--seconds N]        Foreground active relay (continuous while running).
   status       Show relay state / last report.
-  stop         Write the persistent stop marker (service keeps running until it exits).
+  stop         Write the persistent stop marker.
   repair       After a crash: send corrective ARP + remove the guard table.
   verify       Verify the baseline receipt matches this config and code.
-  service start|stop|enable|disable   Control the procd service.
+  service start|stop|enable|disable   Control the procd service (continuous mode).
   guard        Emergency: delete only the scoped nftables table.
   help         This text.
 EOF

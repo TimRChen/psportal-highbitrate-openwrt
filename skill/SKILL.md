@@ -83,16 +83,18 @@ Pass condition: receipt present, `forwarded_out > 0`, `errors: []`,
 ## 4. Verify the mutation path (bounded, recommended first)
 
 ```sh
-portal-bitrate session 300 > /tmp/psportal-session.log 2>&1 &
+portal-bitrate arm 180      # background window; prints "ready" when armed
 ```
 
-Wait ~90 s for `AUTO READY`, tell the human to disconnect + reconnect the Portal,
-then poll `/var/lib/portal-bitrate/status.json`:
+`arm` waits for `AUTO READY` itself and prints `ready: disconnect the Portal from
+the PS5, then reconnect it now.` Tell the human that line verbatim, then poll
+`/var/lib/portal-bitrate/status.json`:
 
 Pass condition: `counts.modified_packets_including_retransmits >= 1` **and**
 `counts.unique_modified_startups >= 1`, and the human confirms picture/controls.
 If the counters stay 0, the packet layout does not match — do not retry blindly;
-report the firmware version and stop.
+report the firmware version and stop. The window ends by itself and restores the
+direct path; verify with `sh skill/scripts/verify.sh` afterwards.
 
 ## 5. Persist (only after step 4 passes)
 
