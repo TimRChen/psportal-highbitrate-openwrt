@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="200" viewBox="0 0 900 200" role="img" aria-label="PS Portal high-bitrate relay — OpenWrt router-mode port">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7ee787"/>
+      <stop offset="1" stop-color="#58a6ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="200" rx="14" fill="url(#bg)"/>
+  <rect x="1" y="1" width="898" height="198" rx="14" fill="none" stroke="#30363d" stroke-width="2"/>
+  <text x="40" y="88" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="38" font-weight="700" fill="#e6edf3">PS Portal high-bitrate relay</text>
+  <text x="40" y="128" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="22" font-weight="600" fill="url(#accent)">OpenWrt router-mode port</text>
+  <text x="40" y="164" font-family="SFMono-Regular, Consolas, monospace" font-size="14" fill="#8b949e">agent-ready · procd service · scoped nftables · one-command rollback</text>
+
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" font-weight="600">
+    <rect x="596" y="56" width="104" height="30" rx="15" fill="#1f6feb33" stroke="#58a6ff" stroke-opacity="0.6"/>
+    <text x="648" y="76" fill="#79c0ff" text-anchor="middle">OpenWrt</text>
+    <rect x="712" y="56" width="148" height="30" rx="15" fill="#3fb95033" stroke="#3fb950" stroke-opacity="0.6"/>
+    <text x="786" y="76" fill="#7ee787" text-anchor="middle">PlayStation Portal</text>
+    <rect x="596" y="96" width="104" height="30" rx="15" fill="#6e40c933" stroke="#a371f7" stroke-opacity="0.6"/>
+    <text x="648" y="116" fill="#d2a8ff" text-anchor="middle">PS5</text>
+    <rect x="712" y="96" width="148" height="30" rx="15" fill="#db6d2833" stroke="#db6d28" stroke-opacity="0.6"/>
+    <text x="786" y="116" fill="#ffa657" text-anchor="middle">PS Portal 7.x</text>
+  </g>
+</svg>

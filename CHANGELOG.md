@@ -24,6 +24,8 @@ Based on upstream `atameric/ps5-portal-high-bitrate` (main, October 2026) and
 - Agent-friendly operating layer: `AGENTS.md`, `skill/SKILL.md`,
   `skill/manifest.json` and `skill/scripts/{detect,install,configure,verify,rollback}.sh`
   (`detect` and `verify` are read-only and emit JSON).
+- Documentation rewrite: banner, badges, decision table, workflow section,
+  verified-output examples, FAQ, English + Simplified Chinese README.
 
 ### Known limitations
 

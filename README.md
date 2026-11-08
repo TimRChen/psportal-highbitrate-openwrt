@@ -1,248 +1,335 @@
-# psportal-highbitrate-openwrt
+<p align="center">
+  <a href="https://github.com/TimRChen/psportal-highbitrate-openwrt"><img src="docs/banner.svg" alt="PS Portal high-bitrate relay — OpenWrt router-mode port" width="820"></a>
+</p>
 
-**Run the PS Portal high-bitrate relay directly on an OpenWrt router.**
+# PS Portal high-bitrate relay — OpenWrt router-mode port
 
-An OpenWrt **router-mode port** of [atameric/ps5-portal-high-bitrate](https://github.com/atameric/ps5-portal-high-bitrate)
+**Run the PlayStation Portal high-bitrate relay directly on your OpenWrt router.**
+No PC, no Raspberry Pi, no always-on container.
+
+This is an **OpenWrt router-mode port** of [atameric/ps5-portal-high-bitrate](https://github.com/atameric/ps5-portal-high-bitrate)
 (MIT). Upstream supports macOS, Windows, native Linux, Raspberry Pi, Proxmox LXC
-and Docker macvlan — **router firmware is explicitly not a supported upstream
-target**. This port adapts the automatic one-way relay so it can run on the LAN
-gateway itself: no extra PC, no Raspberry Pi, no always-on second box.
+and Docker macvlan — router firmware is explicitly **not** a supported upstream
+target. This port makes the relay run on the LAN gateway itself.
 
-> Status: **experimental**. Tested on one router (Cudy TR3000 v1 / ImmortalWrt
-> 24.10 / MediaTek MT7981) and one PS Portal firmware layout that upstream
-> verified (7.1.7). Not a jailbreak, not a 4K unlock, no guaranteed latency
-> improvement. Use at your own risk on hardware you can recover.
->
-> Maintained by [@TimRChen](https://github.com/TimRChen). Issues and firmware
-> compatibility reports are welcome.
+**Read in:** English · [简体中文](README.zh-CN.md)
 
-中文快速开始：[跳到中文](#中文快速开始)
+<p align="center">
+  <a href="https://github.com/TimRChen/psportal-highbitrate-openwrt/stargazers"><img src="https://img.shields.io/github/stars/TimRChen/psportal-highbitrate-openwrt?style=flat&cacheSeconds=1800&color=cfffcf&labelColor=15181e" alt="Stars"></a>
+  <a href="https://github.com/TimRChen/psportal-highbitrate-openwrt/network/members"><img src="https://img.shields.io/github/forks/TimRChen/psportal-highbitrate-openwrt?style=flat&cacheSeconds=1800&color=cfffcf&labelColor=15181e" alt="Forks"></a>
+  <a href="https://github.com/TimRChen/psportal-highbitrate-openwrt/releases"><img src="https://img.shields.io/github/v/release/TimRChen/psportal-highbitrate-openwrt?style=flat&cacheSeconds=1800&color=cfffcf&labelColor=15181e" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/TimRChen/psportal-highbitrate-openwrt?style=flat&cacheSeconds=1800&color=cfffcf&labelColor=15181e" alt="License"></a>
+  <a href="https://github.com/TimRChen/psportal-highbitrate-openwrt/actions/workflows/ci.yml"><img src="https://github.com/TimRChen/psportal-highbitrate-openwrt/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/OpenWrt-23.05%2B%20%2F%2024.10-00a6e0?style=flat&logo=openwrt&logoColor=white" alt="OpenWrt">
+  <img src="https://img.shields.io/badge/python-3.9%2B-3776AB?style=flat&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/upstream-atameric%2Fps5--portal--high--bitrate-8957e5?style=flat" alt="Upstream">
+</p>
 
-## For AI agents
-
-This repo ships an **agent skill** so an assistant can install, configure, verify
-and roll back the relay without improvising commands:
-
-- [`AGENTS.md`](AGENTS.md) — ground rules, gates, success criteria, reporting format
-- [`skill/SKILL.md`](skill/SKILL.md) — step-by-step playbook with a diagnostics table
-- [`skill/manifest.json`](skill/manifest.json) — machine-readable requirements, steps and checks
-- [`skill/scripts/`](skill/scripts/) — `detect.sh` (read-only probe, JSON),
-  `install.sh`, `configure.sh`, `verify.sh` (read-only, JSON), `rollback.sh`
-
-Typical agent loop:
-
-```sh
-sh skill/scripts/detect.sh                       # JSON; stop if ok=false
-sh skill/scripts/install.sh
-sh skill/scripts/configure.sh --ps5-ip <IP> --portal-ip <IP> --profile 65
-portal-bitrate baseline --seconds 240            # human reconnects Portal in window
-portal-bitrate session 300                       # human reconnects again; verify counters
-sh skill/scripts/verify.sh                       # JSON; ok must be true
-```
-
-Safety contract enforced by the skill: only the scoped `inet portal_bitrate_guard`
-table is touched, `ip_forward` is never changed, one relay instance only, and
-recovery must be verified after every stop.
+> **Status: experimental.** Verified on one router (Cudy TR3000 v1, MediaTek
+> MT7981, ImmortalWrt 24.10) and one Portal firmware layout that upstream
+> validated (7.1.7). Not a jailbreak, not a 4K unlock, no guaranteed latency
+> improvement. Keep a recovery path in mind on hardware you rely on.
 
 ---
 
-## What it actually does
+## Start here
 
-PlayStation Portal and PS5 negotiate a session startup packet ("LaunchSpec")
-that contains a plaintext bitrate field (`25000`). The relay temporarily
-redirects the **Portal → PS5 control direction** through itself, rewrites that
-one field (`25000` → `65000` for profile `65`, or `1e+05` / `2e+05`), and lets
-the session continue. The **PS5 → Portal video path is never relayed** — it
-keeps the direct LAN path.
-
-```
-             ┌──────────── relay host (this port: the router itself) ───────────┐
-Portal ──ARP──▶  control packets  ──▶  patch bitrate byte  ──▶  PS5
-       (spoofed)                                                        │
-Portal ◀──────────────── video (direct L2, never relayed) ◀─────────────┘
-```
-
-Profiles (from upstream): `65` (default recommendation), `100`, `200`
-(experimental). Start with `65`.
-
-## Why a router port needs changes
-
-Upstream refuses to start when IPv4 forwarding is enabled, because a relaying
-host must not forward the original frame itself — otherwise every relayed packet
-arrives twice. A router **must** keep `net.ipv4.ip_forward=1`. This port solves
-that with a scoped, self-removing `nftables` table instead of touching the global
-firewall:
-
-| Change | File |
+| What you have | Where to go |
 |---|---|
-| Router mode: skip the `ip_forward == 0` refusal (env `PORTAL_BITRATE_ROUTER_MODE=1`) | `module/portal_auto_platform.py` |
-| Scoped `inet portal_bitrate_guard` table that drops only `Portal → PS5` forwarded duplicates | `module/portal_auto_platform.py` |
-| Install guard on start, remove it on every stop/crash/guardian-exit path | `module/portal_auto.py` |
-| Non-interactive `configure --interface --ps5-ip --portal-ip` | `module/portal_auto.py` |
-| Configurable baseline window (`--seconds`) and guardian start timeout 10 s → 90 s | `module/portal_auto.py` |
-| procd service + CLI wrapper + installer | `openwrt/`, `install.sh` |
+| **An OpenWrt / ImmortalWrt router** as your home gateway | [Quick start](#quick-start): five commands, ~10 minutes. |
+| **A coding agent** (Claude Code, Codex, Gemini CLI, …) | [Agent skill](#agent-skill): one skill folder, JSON probes, no guessing. |
+| **No coding agent and just want the relay** | [Quick start](#quick-start) runs by hand too. |
+| **Curious how it works first** | [How it works](#how-it-works) and [What you get](#verified-result). |
+| **Portal resolution dropped / relay not patching** | [Troubleshooting](#troubleshooting) and [docs/troubleshooting.md](docs/troubleshooting.md). |
 
-Details: [`docs/openwrt-port-notes.md`](docs/openwrt-port-notes.md).
+---
 
-## Requirements
+## How it works
 
-- OpenWrt / ImmortalWrt 23.05+ or 24.10+ with `nftables` (fw4), `ip-full`,
-  `nft`, `root` access.
-- ~35 MB free overlay space (Python 3 + scapy).
-- Enrolled devices on the **same IPv4 L2 segment** as the router LAN bridge
-  (`br-lan`), no client isolation, no VLAN between them.
-- PS5 and Portal IPv4 addresses reserved in DHCP.
+The Portal and the PS5 negotiate a session startup packet that contains a
+plaintext bitrate field (`25000`). The relay temporarily redirects the
+**Portal → PS5 control direction** through itself, rewrites that one field
+(`25000` → `65000` for profile `65`), then leaves the session alone. The
+**PS5 → Portal video path is never relayed** — it keeps the direct LAN path.
 
-## Install
+```
+   ┌─────────────── the router itself runs the relay ────────────────┐
+   │                                                                 │
+ Portal ──ARP──▶  control packets  ──▶  patch bitrate byte  ──▶  PS5
+        (spoofed)                    (profile 65: 25000→65000)
+   │                                                                 │
+ Portal ◀───────────── video (direct L2, never relayed) ◀───────────┘
+```
+
+| Piece | What it does |
+|---|---|
+| **ARP spoof** | Makes the Portal believe the PS5 lives at the router's MAC. Only the Portal's ARP entry is changed, and it is restored on every exit path. |
+| **Userspace patch** | `scapy` inspects `Portal → PS5` frames, rewrites the LaunchSpec bitrate byte, recomputes the UDP checksum and re-injects the frame. |
+| **Scoped nftables guard** | A router must keep `ip_forward=1`; this project adds one table, `inet portal_bitrate_guard`, that drops only the duplicate `Portal → PS5` copy the kernel would forward. No global firewall, sysctl or firmware changes. |
+| **procd service** | Run once (`portal-bitrate session`) or permanently; the service restarts cleanly and removes its table on stop/crash. |
+
+Why a port at all? Upstream refuses to start with `net.ipv4.ip_forward=1`. A
+gateway must have it. The port solves that with the scoped table instead of
+relaxing the safety rule. Details in
+[docs/openwrt-port-notes.md](docs/openwrt-port-notes.md).
+
+---
+
+## Quick start
 
 ```sh
+# 0) requirements: OpenWrt 23.05+ with fw4/nftables, root shell, ≥35 MB free on /overlay
 opkg update
 opkg install python3 python3-pip
 pip3 install --break-system-packages scapy==2.6.1
 
-# from the extracted release / git checkout on the router
+# 1) install the port (from a git checkout or extracted release)
 sh install.sh
-```
 
-Installs to `/usr/lib/portal-bitrate`, `/etc/init.d/portal-bitrate`,
-`/usr/bin/portal-bitrate`; config in `/etc/portal-bitrate/auto-config.json`;
-runtime state in `/var/lib/portal-bitrate`.
-
-## First run
-
-```sh
-# 1) enroll: PS5 and Portal awake; interface is the LAN bridge
+# 2) enroll your devices (both awake; interface is the LAN bridge)
 portal-bitrate configure --interface br-lan \
   --ps5-ip 192.168.1.100 --portal-ip 192.168.1.101 --profile 65
 
-# 2) baseline: no mutation, proves the relay path works
-#    Disconnect the Portal from the PS5 first, then reconnect within the window.
+# 3) baseline: no mutation, proves the path works
+#    Start it, wait for "BASELINE READY", then reconnect the Portal inside the window
 portal-bitrate baseline --seconds 240
-#    -> wait for "BASELINE READY", reconnect the Portal, play ~30 s
-#    -> a receipt is written only if control traffic was forwarded and recovery succeeded
 
-# 3) active trial (65 Mbps target)
+# 4) trial: apply the mutation to the next fresh session
 portal-bitrate session 300
-#    -> wait for "AUTO READY", disconnect + reconnect the Portal, play
-#    -> Ctrl+C / window end restores the direct path
 
-# 4) persist: every new Portal session gets patched automatically
+# 5) keep it (patches every new session automatically)
 /etc/init.d/portal-bitrate enable
 /etc/init.d/portal-bitrate start
 ```
 
-Verify on the router:
+During steps 3 and 4 the Portal must be **disconnected and reconnected inside the
+window**. The relay prints `BASELINE READY` / `AUTO READY` first; the counters
+then confirm the patch. Use `portal-bitrate status` to watch them.
 
-```sh
-portal-bitrate status
-# counts.modified_packets_including_retransmits / counts.unique_modified_startups
-# increase once per freshly negotiated session
+---
+
+## Verified result
+
+Real output from the reference device after two reconnects:
+
+```json
+// /var/lib/portal-bitrate/status.json
+{
+  "mode": "active",
+  "profile": "65",
+  "counts": {
+    "forwarded_out": 121276,
+    "forwarded_bytes": 11000000,
+    "modified_packets_including_retransmits": 2,
+    "unique_modified_startups": 2
+  },
+  "last_mutation": "2026-11-08T06:15:49Z"
+}
 ```
 
-Verify on the Portal: picture/controls must be checked by hand — the relay
-cannot prove PS5 acceptance or measured video throughput.
-
-## Operations
-
-```sh
-portal-bitrate status            # state + counters
-portal-bitrate session [secs]    # bounded on-demand window (no permanent relay)
-portal-bitrate repair            # after a crash: corrective ARP + remove guard table
-portal-bitrate guard             # emergency: remove only the scoped nftables table
-/etc/init.d/portal-bitrate start|stop|enable|disable
+```json
+// sh skill/scripts/verify.sh
+{"ok": true, "problems": [], "relay_instances": 2, "guard_table_present": true,
+ "arp_restored": true, "baseline_receipt": true, "state": "running"}
 ```
 
-Uninstall:
+`modified_packets_including_retransmits` and `unique_modified_startups` grow by
+one per **fresh** session. They are the only proof the relay did its job; picture
+quality still has to be checked on the Portal by a human.
+
+---
+
+## Supported hardware
+
+| Platform | Status |
+|---|---|
+| **OpenWrt / ImmortalWrt 24.10 (fw4)** | ✅ Reference target: Cudy TR3000 v1, MediaTek MT7981, aarch64. |
+| **OpenWrt / ImmortalWrt 23.05 (fw4)** | ✅ Expected; Python 3 ≥ 3.9 and `nft` required. |
+| **OpenWrt 22.03 and older (iptables/fw3)** | ⚠️ Not tested — the guard table is nftables-only. |
+| **Router with `kmod-veth` unavailable** | ✅ Not a problem: this port does not use veth/netns at all. |
+| **PC / Raspberry Pi / LXC / Docker** | Use [upstream](https://github.com/atameric/ps5-portal-high-bitrate) — it is the better tool there. |
+
+Tested with one Portal firmware layout (upstream: 7.1.7). Other firmware may not
+match the packet heuristic; nothing breaks, the counters simply stay at zero.
+
+---
+
+## CLI reference
+
+| Command | What it does |
+|---|---|
+| `portal-bitrate configure ...` | Enroll PS5 + Portal (ARP-verified), write `/etc/portal-bitrate/auto-config.json`. |
+| `portal-bitrate baseline [--seconds N]` | No-mutation run; writes the baseline receipt required before active mode. |
+| `portal-bitrate session [secs]` | Bounded on-demand window (default 120 s): patch the next fresh session, then restore the direct path. |
+| `portal-bitrate run [--seconds N]` | Foreground relay, active mode (continuous while running). |
+| `portal-bitrate status` | State + counters from `/var/lib/portal-bitrate/status.json`. |
+| `portal-bitrate stop` | Write the persistent stop marker. |
+| `portal-bitrate repair` | After a crash: corrective ARP + remove the guard table. |
+| `portal-bitrate guard` | Emergency: delete only the scoped nftables table. |
+| `portal-bitrate verify` | Check the baseline receipt matches this config and code. |
+| `/etc/init.d/portal-bitrate enable\|start\|stop\|disable` | procd service control. |
+
+Full details and safety rules: [docs/openwrt-port-notes.md](docs/openwrt-port-notes.md).
+
+---
+
+## Agent skill
+
+The repo is built to be driven by an AI agent end to end:
+
+| File | Purpose |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | Ground rules, hard gates, success criteria, reporting format. |
+| [`skill/SKILL.md`](skill/SKILL.md) | Step-by-step playbook with a diagnostics decision tree. |
+| [`skill/manifest.json`](skill/manifest.json) | Machine-readable requirements, steps and verification. |
+| [`skill/scripts/detect.sh`](skill/scripts/detect.sh) | Read-only environment probe → JSON (`ok`, `reasons`, details). |
+| [`skill/scripts/install.sh`](skill/scripts/install.sh) | Idempotent install (prerequisites + this repo). |
+| [`skill/scripts/configure.sh`](skill/scripts/configure.sh) | Non-interactive enrollment with IPv4 validation. |
+| [`skill/scripts/verify.sh`](skill/scripts/verify.sh) | Read-only state check → JSON, including ARP restoration. |
+| [`skill/scripts/rollback.sh`](skill/scripts/rollback.sh) | Stop, remove, restore, post-check. |
+
+Agent loop:
 
 ```sh
-sh uninstall.sh          # keeps /etc/portal-bitrate config, removes everything else
-sh uninstall.sh --purge  # also removes the enrollment
+sh skill/scripts/detect.sh                       # stop if ok=false
+sh skill/scripts/install.sh
+sh skill/scripts/configure.sh --ps5-ip <IP> --portal-ip <IP> --profile 65
+portal-bitrate baseline --seconds 240            # human reconnects inside the window
+portal-bitrate session 300                       # human reconnects again
+sh skill/scripts/verify.sh                       # ok must be true
 ```
 
-## Important caveats
+The skill enforces: only the scoped nftables table, one relay instance, always
+verify recovery, never claim 4K or latency gains, never publish the user's
+MACs/IPs. See [`AGENTS.md`](AGENTS.md).
 
-1. **Continuous relay vs on-demand.** Running the relay permanently (service
-   mode) patches every new session automatically, but all Portal → PS5 control
-   packets are then forwarded in userspace. On very weak CPUs use
-   `portal-bitrate session` before playing instead — the patch is applied once
-   and the direct path is restored.
-2. **CPU spikes look like "the relay broke streaming".** On routers running
-   OpenClash, disable *streaming auto-select* (`openclash.config.stream_auto_select=0`)
-   and do not leave LuCI **OpenClash** pages open in a browser: they spawn
-   periodic network checks that saturate the CPU and can force the Portal to
-   drop resolution. See [`docs/troubleshooting.md`](docs/troubleshooting.md).
-3. **Firmware sensitivity.** The mutation matches a recorded packet layout. If
-   `modified_packets_including_retransmits` does not increase, the layout does
-   not match; nothing is corrupted, but no bitrate change happens either.
-4. **Recovery.** If the relay dies, the guardian restores the Portal's ARP entry;
-   if that fails, run `portal-bitrate repair`. A stale guard table only blocks
-   Portal → PS5 control traffic until removed.
-5. **No 4K, no guaranteed 200 Mbps.** Target bitrate reported by the PS5 is not
-   measured video throughput.
-6. **Thermals.** A small travel router running 24/7 as gateway + AP + proxy +
-   relay runs hot; improve airflow, or use on-demand session mode.
+---
+
+## Troubleshooting
+
+The full list is in [docs/troubleshooting.md](docs/troubleshooting.md). The three
+that matter most:
+
+- ⚠️ **`ERROR: IPv4 forwarding is enabled.`** — the router-mode env is missing.
+  For the procd service, `env` is a single list:
+  `procd_set_param env PORTAL_BITRATE_ROUTER_MODE=1 PYTHONUNBUFFERED=1`.
+  Two separate lines overwrite each other.
+- 🖥️ **Portal stutters and drops to 720p/360p** — usually the router's CPU, not
+  the relay. On OpenClash routers disable streaming auto-select
+  (`uci set openclash.config.stream_auto_select=0`), close LuCI OpenClash tabs,
+  check `iwinfo rax0 assoclist` for a 20 MHz fallback, and keep the PS5's RSSI
+  above −65 dBm. On weak CPUs prefer `portal-bitrate session` over the service.
+- 🔁 **Portal cannot reach the PS5 after an unclean kill** — the spoofed ARP
+  entry is stale: `portal-bitrate repair`. It also expires on its own.
+
+---
+
+## Questions people ask
+
+<details>
+<summary><b>Is this safe for my network?</b></summary>
+
+It touches exactly one nftables table (`inet portal_bitrate_guard`), which it
+creates and removes itself, plus the Portal's ARP entry, which is restored on
+every exit path and expires on its own. It never edits `ip_forward`, DNS, DHCP or
+`inet fw4`, and never flashes firmware. A hard kill can leave the Portal briefly
+unable to reach the PS5 — `portal-bitrate repair` fixes that.
+
+</details>
+
+<details>
+<summary><b>Will the relay make streaming laggy?</b></summary>
+
+The relay only carries `Portal → PS5` control traffic; video never passes through
+it. Measured overhead on the reference MT7981 was ~3 % CPU. If you do see lag,
+the usual cause is CPU saturation from other router services (OpenClash
+streaming auto-select, open LuCI pages) — see Troubleshooting. `session` mode
+also restores the direct path after patching, so nothing runs during play.
+
+</details>
+
+<details>
+<summary><b>Which bitrate profile should I pick?</b></summary>
+
+Start with `65`. `100` and `200` are experimental and may stutter. The target is
+what the PS5 is asked for; it is **not** measured video throughput.
+
+</details>
+
+<details>
+<summary><b>Does it work on a router without veth support?</b></summary>
+
+Yes. Upstream container/LXC deployments need veth and netns; this port avoids
+both — it ARP-spoofs on the LAN bridge and re-injects frames from the host
+namespace, with the kernel's duplicate drop handled by the scoped table.
+
+</details>
+
+<details>
+<summary><b>Will it survive a reboot?</b></summary>
+
+Yes when the service is enabled (`/etc/init.d/portal-bitrate enable`). The relay
+re-enrolls nothing; it reads `/etc/portal-bitrate/auto-config.json` and requires a
+valid baseline receipt, so keep both files across reboots (they are on the normal
+overlay).
+
+</details>
+
+<details>
+<summary><b>Where are my devices' MACs stored?</b></summary>
+
+In `/etc/portal-bitrate/auto-config.json`, written by `configure`. It is ignored
+by git, printed nowhere by the scripts, and never uploaded.
+
+</details>
+
+---
+
+## Limits and safety
+
+- **Experimental.** One upstream-validated Portal firmware layout (7.1.7). Other
+  firmware may not match; no corruption, just no patch.
+- **No 4K, no guaranteed latency improvement.** Target bitrate ≠ real bitrate.
+- **One-way relay only.** Video keeps the direct path by design.
+- **Not affiliated** with Sony, PlayStation, the upstream author or OpenWrt.
+- **Recovery:** `portal-bitrate repair` (ARP + table), `portal-bitrate guard`
+  (table only), `sh uninstall.sh` (full removal, keeps config unless `--purge`).
+
+---
+
+## Restore / uninstall
+
+```sh
+/etc/init.d/portal-bitrate stop
+/etc/init.d/portal-bitrate disable
+sh uninstall.sh            # keeps /etc/portal-bitrate/auto-config.json
+sh uninstall.sh --purge    # removes the enrollment too
+```
+
+After removal: no `portal_auto.py` process, no `inet portal_bitrate_guard` table,
+and the Portal/PS5 ARP entries are back to the real MACs.
+
+---
+
+## Credits and related projects
+
+- **[atameric/ps5-portal-high-bitrate](https://github.com/atameric/ps5-portal-high-bitrate)**
+  — the relay design, the LaunchSpec offset-334 heuristic and the 65/100/200
+  profiles. MIT, © 2026 atameric. This repository is a port, not a fork of the
+  design.
+- **[wchwawa/better-portal](https://github.com/wchwawa/better-portal)** — a guided
+  TUI around the same upstream approach, useful reference for verification flow.
+- The OpenWrt adaptation (router mode, scoped nftables guard, procd, agent skill)
+  is maintained by [@TimRChen](https://github.com/TimRChen).
+
+Contributions are welcome — especially router models and Portal firmware reports.
+Read [`AGENTS.md`](AGENTS.md) if you drive changes with an agent, and
+[`docs/troubleshooting.md`](docs/troubleshooting.md) before filing an issue.
+
+---
 
 ## License
 
-MIT. Upstream copyright and license preserved — see [`LICENSE`](LICENSE) and
-[`NOTICE.md`](NOTICE.md). Independent community software; not affiliated with
-Sony, PlayStation, the upstream author or OpenWrt.
-
----
-
-## 中文快速开始
-
-**这是一个把 [atameric/ps5-portal-high-bitrate](https://github.com/atameric/ps5-portal-high-bitrate)
-（MIT）移植到 OpenWrt 路由器上运行的项目**，目标是让路由器自己充当 relay，
-不需要额外电脑/树莓派。
-
-> 状态：实验性。仅在 Cudy TR3000 v1（ImmortalWrt 24.10 / MT7981）+ 上游验证过的
-> Portal 固件布局上测试过。不是破解、不解锁 4K、不保证降低延迟。
-
-### 安装
-
-```sh
-opkg update
-opkg install python3 python3-pip
-pip3 install --break-system-packages scapy==2.6.1
-sh install.sh
-```
-
-### 首次配置
-
-```sh
-# 登记设备（PS5 / Portal 都要在线，接口为局域网网桥）
-portal-bitrate configure --interface br-lan \
-  --ps5-ip 192.168.1.100 --portal-ip 192.168.1.101 --profile 65
-
-# 基线测试（不修改任何包）
-# 先断开 Portal 与 PS5 的连接；看到 BASELINE READY 后再连回去玩 30 秒
-portal-bitrate baseline --seconds 240
-
-# 正式试验（65Mbps 目标码率）
-portal-bitrate session 300
-# 看到 AUTO READY 后：断开 Portal → 重新连接 PS5 → 玩；窗口结束自动恢复直连
-
-# 常驻（每次新会话自动打补丁）
-/etc/init.d/portal-bitrate enable
-/etc/init.d/portal-bitrate start
-```
-
-### 查看与排障
-
-```sh
-portal-bitrate status     # 看 counts：modified_packets / unique_modified_startups 每次新会话 +1
-portal-bitrate repair     # 异常后：纠正 ARP + 删除 guard 表
-portal-bitrate guard      # 应急：只删 scoped nft 表
-```
-
-**常见坑**：
-
-1. 路由器开着 OpenClash 时，先关闭「流媒体自动选路」
-   （`uci set openclash.config.stream_auto_select=0`），并且**不要长期开着
-   LuCI 的 OpenClash 页面**——它会在路由器上周期性跑网络检测，把 CPU 打满，
-   导致 Portal 降分辨率（看起来像"relay 把串流搞卡了"）。
-2. 如果 `modified_packets_including_retransmits` 不增长，说明你的 Portal 固件
-   握手包布局不匹配，此时不会改包也没有副作用。
-3. 崩溃后 Portal 可能短暂连不上 PS5：`portal-bitrate repair` 即可；ARP 条目
-   本来也会在几十秒内自动过期。
+MIT. Upstream copyright preserved — see [`LICENSE`](LICENSE) and
+[`NOTICE.md`](NOTICE.md). Independent community software; “PlayStation”, “PS5”
+and “PlayStation Portal” are trademarks of Sony Interactive Entertainment Inc.
